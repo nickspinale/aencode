@@ -76,6 +76,10 @@ parseBDict = char 'd' *> inner <* char 'e'
     sorted x@(_:y) = all (== LT) $ zipWith (compare `on` fst) x y
     sorted _ = True
 
+----------------------------------------
+-- OTHER PARSER STUFF
+----------------------------------------
+
 -- Not very efficient because toStrict's a bytestring
 _BValue :: Prism' B.ByteString BValue
 _BValue = prism' (L.toStrict . toLazyByteString . writeBValue) (onlyDo parseBValue)
@@ -120,7 +124,7 @@ surround :: Char -> Builder -> Builder
 surround = (.) (<> char8 'e') . (<>) . char8
 
 ----------------------------------------
--- PRISMS
+-- CLASSES
 ----------------------------------------
 
 class ToBencode a where
