@@ -9,12 +9,16 @@ module Data.Aencode
     , ToBencode'
     , FromBencode'
   --
+    , _BValue
+    , _Translated
+    , _Translated'
+  --
     , _BString
     , _BInt
     , _BList
     , _BDict
   --
-    , parseBValue'
+    , onlyDo
     , parseBValue
   --
     , writeBValue
@@ -55,8 +59,8 @@ class FromBencode' a where
 -- PARSERS
 ----------------------------------------
 
-parseBValue' :: Parser BValue
-parseBValue' =  parseBValue <* endOfInput
+onlyDo :: Parser a -> B.ByteString -> Maybe a
+onlyDo = ((maybeResult . (`feed` B.empty)) .) . parse . (<* endOfInput)
 
 -- Parse a Bencoded value
 parseBValue :: Parser BValue
@@ -114,6 +118,21 @@ writeBDict = surround 'd'
 
 surround :: Char -> B.ByteString -> B.ByteString
 surround = (.) (`C.snoc` 'e') . C.cons
+
+----------------------------------------
+-- PRISMS
+----------------------------------------
+
+_BValue :: Prism' B.ByteString BValue
+_BValue = prism' writeBValue (onlyDo parseBValue)
+
+_Translated :: (FromBencode a, ToBencode a) => Prism' BValue a
+_Translated = prism' encode decode
+
+-- I'm not sure how to appropriately qualify c in this type signature,
+-- but GHC can figure it out.
+-- _Translated' :: (FromBencode' a, ToBencode' a) => c -> Prism' BValue a
+_Translated' c = prism' (encode' c) (decode' c)
 
 ----------------------------------------
 -- TEMPLATE HASKELL
