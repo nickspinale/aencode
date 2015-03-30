@@ -3,27 +3,21 @@
 module Curry.Parsers.Bencode
     (
   --
-    BValue(..)
-    BDict
-    ToBencode
-    FromBencode
+      BValue(..)
+    , ToBencode
+    , FromBencode
+    , ToBencode'
+    , FromBencode'
   --
     , _BString
     , _BInt
     , _BList
     , _BDict
   --
+    , parseBValue'
     , parseBValue
-    , parseBString
-    , parseBInt
-    , parseBList
-    , parseBDict
   --
     , writeBValue
-    , writeBString
-    , writeBInt
-    , writeBList
-    , writeBDict
   --
     ) where
 
@@ -42,20 +36,27 @@ import           Prelude hiding (take)
 data BValue = BString B.ByteString
             | BInt Integer
             | BList [BValue]
-            | BDict BDict
+            | BDict (M.Map B.ByteString BValue)
             deriving Show
-
-type BDict = M.Map B.ByteString BValue
 
 class ToBencode a where
     encode :: a -> BValue
 
 class FromBencode a where
-    encode :: BValue -> Maybe a
+    decode :: BValue -> Maybe a
+
+class ToBencode' a where
+    encode' :: c -> a -> BValue
+
+class FromBencode' a where
+    decode' :: c -> BValue -> Maybe a
 
 ----------------------------------------
 -- PARSERS
 ----------------------------------------
+
+parseBValue' :: Parser BValue
+parseBValue' =  parseBValue <* endOfInput
 
 -- Parse a Bencoded value
 parseBValue :: Parser BValue
@@ -73,7 +74,7 @@ parseBInt = char 'i' *> signed decimal <* char 'e'
 parseBList :: Parser [BValue]
 parseBList = char 'l' *> many' parseBValue <* char 'e'
 
-parseBDict :: Parser BDict
+parseBDict :: Parser (M.Map B.ByteString BValue)
 parseBDict = char 'd' *> inner <* char 'e'
 
 inner = do
@@ -105,7 +106,7 @@ writeBInt = surround 'i' . C.pack . show
 writeBList :: [BValue] -> B.ByteString
 writeBList = surround 'l' . B.concat . map writeBValue
 
-writeBDict :: BDict -> B.ByteString
+writeBDict :: M.Map B.ByteString BValue -> B.ByteString
 writeBDict = surround 'd'
            . B.concat
            . map (\(k, v) -> writeBString k `B.append` writeBValue v)
