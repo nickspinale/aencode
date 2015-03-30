@@ -1,6 +1,6 @@
 {-# LANGUAGE TemplateHaskell #-}
 
-module Curry.Parsers.Bencode
+module Data.Aencode
     (
   --
       BValue(..)
