@@ -12,14 +12,15 @@ module Data.Aencode
     , buildBValue
   --
     , _BValue
+    , _BValue'
     , onlyDo
     , onlyDo'
   --
     , ToBencode
     , FromBencode
+    , _Translated
     , ToBencode'
     , FromBencode'
-    , _Translated
     , _Translated'
     ) where
 
@@ -80,10 +81,10 @@ parseBDict = char 'd' *> inner <* char 'e'
 ----------------------------------------
 
 buildBValue :: BValue -> Builder
-buildBValue (BString x) = writeBString x
-buildBValue (BInt    x) = writeBInt    x
-buildBValue (BList   x) = writeBList   x
-buildBValue (BDict   x) = writeBDict   x
+buildBValue (BString x) = buildBString x
+buildBValue (BInt    x) = buildBInt    x
+buildBValue (BList   x) = buildBList   x
+buildBValue (BDict   x) = buildBDict   x
 
 buildBString :: B.ByteString -> Builder
 buildBString s = intDec (B.length s) <> char8 ':' <> byteString s
@@ -92,11 +93,11 @@ buildBInt :: Integer -> Builder
 buildBInt = surround 'i' . integerDec
 
 buildBList :: [BValue] -> Builder
-buildBList = surround 'l' . mconcat . map writeBValue
+buildBList = surround 'l' . mconcat . map buildBValue
 
 buildBDict :: M.Map B.ByteString BValue -> Builder
 buildBDict d = surround 'd' $ mconcat
-                   [ writeBString k <> writeBValue v
+                   [ buildBString k <> buildBValue v
                    | (k, v) <-  M.toAscList d
                    ]
 
@@ -107,12 +108,12 @@ surround = (.) (<> char8 'e') . (<>) . char8
 -- OTHER PARSER STUFF
 ----------------------------------------
 
--- Not very efficient because toStrict's a bytestring
+-- Not very efficient because it toStrict's a bytestring
 _BValue :: Prism' B.ByteString BValue
-_BValue = prism' (L.toStrict . toLazyByteString . writeBValue) (onlyDo parseBValue)
+_BValue = prism' (L.toStrict . toLazyByteString . buildBValue) (onlyDo parseBValue)
 
 _BValue' :: Prism' L.ByteString BValue
-_BValue' = prism' (toLazyByteString . writeBValue) (onlyDo' parseBValue)
+_BValue' = prism' (toLazyByteString . buildBValue) (onlyDo' parseBValue)
 
 -- Parse exactly a _ (strict)
 onlyDo :: Parser a -> B.ByteString -> Maybe a
@@ -126,11 +127,18 @@ onlyDo' = (A.maybeResult .) . A.parse . (<* endOfInput)
 -- CLASSES
 ----------------------------------------
 
+-- Context-free
+
 class ToBencode a where
     encode :: a -> BValue
 
 class FromBencode a where
     decode :: BValue -> Maybe a
+
+_Translated :: (FromBencode a, ToBencode a) => Prism' BValue a
+_Translated = prism' encode decode
+
+-- Not context-free
 
 class ToBencode' a where
     encode' :: c -> a -> BValue
@@ -138,11 +146,6 @@ class ToBencode' a where
 class FromBencode' a where
     decode' :: c -> BValue -> Maybe a
 
-_Translated :: (FromBencode a, ToBencode a) => Prism' BValue a
-_Translated = prism' encode decode
-
--- I'm not sure how to appropriately qualify c in this type signature,
--- but GHC can figure it out.
 -- _Translated' :: (FromBencode' a, ToBencode' a) => c -> Prism' BValue a
 _Translated' c = prism' (encode' c) (decode' c)
 
