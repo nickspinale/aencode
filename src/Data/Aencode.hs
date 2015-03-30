@@ -1,8 +1,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 
 module Data.Aencode
-    (
-      BValue(..)
+    ( BValue(..)
     , _BString
     , _BInt
     , _BList
@@ -13,8 +12,6 @@ module Data.Aencode
   --
     , _BValue
     , _BValue'
-    , onlyDo
-    , onlyDo'
   --
     , ToBencode
     , FromBencode
@@ -30,6 +27,7 @@ import           Control.Monad
 import           Data.Attoparsec.ByteString
 import           Data.Attoparsec.ByteString.Char8 (char, decimal, signed)
 import qualified Data.Attoparsec.ByteString.Lazy as A
+import           Data.Attoparsec.More
 import qualified Data.ByteString as B
 import           Data.ByteString.Builder
 import qualified Data.ByteString.Lazy as L
@@ -114,14 +112,6 @@ _BValue = prism' (L.toStrict . toLazyByteString . buildBValue) (onlyDo parseBVal
 
 _BValue' :: Prism' L.ByteString BValue
 _BValue' = prism' (toLazyByteString . buildBValue) (onlyDo' parseBValue)
-
--- Parse exactly a _ (strict)
-onlyDo :: Parser a -> B.ByteString -> Maybe a
-onlyDo = ((maybeResult . (`feed` B.empty)) .) . parse . (<* endOfInput)
-
--- Parse exactly a _ (lazy)
-onlyDo' :: Parser a -> L.ByteString -> Maybe a
-onlyDo' = (A.maybeResult .) . A.parse . (<* endOfInput)
 
 ----------------------------------------
 -- CLASSES

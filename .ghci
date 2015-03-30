@@ -1,1 +1,1 @@
-:set -isrc:tests
+:set -isrc:tests:aux/*/src

@@ -1,0 +1,3 @@
+[submodule "aux/attoparsec-more"]
+	path = aux/attoparsec-more
+	url = https://github.com/nickspinale/attoparsec-more.git
