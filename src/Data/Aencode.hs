@@ -9,16 +9,16 @@ module Data.Aencode
     , _BDict
   --
     , parseBValue
+    , buildBValue
+  --
+    , _BValue
     , onlyDo
     , onlyDo'
-  --
-    , writeBValue
   --
     , ToBencode
     , FromBencode
     , ToBencode'
     , FromBencode'
-    , _BValue
     , _Translated
     , _Translated'
     ) where
@@ -31,7 +31,6 @@ import           Data.Attoparsec.ByteString.Char8 (char, decimal, signed)
 import qualified Data.Attoparsec.ByteString.Lazy as A
 import qualified Data.ByteString as B
 import           Data.ByteString.Builder
-import qualified Data.ByteString.Char8 as C
 import qualified Data.ByteString.Lazy as L
 import           Data.Monoid
 import           Data.Function
@@ -77,6 +76,34 @@ parseBDict = char 'd' *> inner <* char 'e'
     sorted _ = True
 
 ----------------------------------------
+-- WRITERS
+----------------------------------------
+
+buildBValue :: BValue -> Builder
+buildBValue (BString x) = writeBString x
+buildBValue (BInt    x) = writeBInt    x
+buildBValue (BList   x) = writeBList   x
+buildBValue (BDict   x) = writeBDict   x
+
+buildBString :: B.ByteString -> Builder
+buildBString s = intDec (B.length s) <> char8 ':' <> byteString s
+
+buildBInt :: Integer -> Builder
+buildBInt = surround 'i' . integerDec
+
+buildBList :: [BValue] -> Builder
+buildBList = surround 'l' . mconcat . map writeBValue
+
+buildBDict :: M.Map B.ByteString BValue -> Builder
+buildBDict d = surround 'd' $ mconcat
+                   [ writeBString k <> writeBValue v
+                   | (k, v) <-  M.toAscList d
+                   ]
+
+surround :: Char -> Builder -> Builder
+surround = (.) (<> char8 'e') . (<>) . char8
+
+----------------------------------------
 -- OTHER PARSER STUFF
 ----------------------------------------
 
@@ -94,34 +121,6 @@ onlyDo = ((maybeResult . (`feed` B.empty)) .) . parse . (<* endOfInput)
 -- Parse exactly a _ (lazy)
 onlyDo' :: Parser a -> L.ByteString -> Maybe a
 onlyDo' = (A.maybeResult .) . A.parse . (<* endOfInput)
-
-----------------------------------------
--- WRITERS
-----------------------------------------
-
-writeBValue :: BValue -> Builder
-writeBValue (BString x) = writeBString x
-writeBValue (BInt    x) = writeBInt    x
-writeBValue (BList   x) = writeBList   x
-writeBValue (BDict   x) = writeBDict   x
-
-writeBString :: B.ByteString -> Builder
-writeBString s = intDec (B.length s) <> char8 ':' <> byteString s
-
-writeBInt :: Integer -> Builder
-writeBInt = surround 'i' . integerDec
-
-writeBList :: [BValue] -> Builder
-writeBList = surround 'l' . mconcat . map writeBValue
-
-writeBDict :: M.Map B.ByteString BValue -> Builder
-writeBDict d = surround 'd' $ mconcat
-                   [ writeBString k <> writeBValue v
-                   | (k, v) <-  M.toAscList d
-                   ]
-
-surround :: Char -> Builder -> Builder
-surround = (.) (<> char8 'e') . (<>) . char8
 
 ----------------------------------------
 -- CLASSES
