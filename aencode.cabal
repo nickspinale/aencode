@@ -20,11 +20,9 @@ library
   exposed-modules:     Data.Aencode
   -- other-modules:       
   other-extensions:    TemplateHaskell
-  -- NOTE: does not yet include bounds
-  build-depends:       attoparsec >= 0.10
-                       attoparsec-more,
+  build-depends:       attoparsec >= 0.10,
                        base >= 4.7,
                        bytestring >= 0.10.2,
                        containers,
-                       lens,
+                       lens
   default-language:    Haskell2010
