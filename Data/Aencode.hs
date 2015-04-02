@@ -37,12 +37,11 @@ import           Control.Monad
 import           Data.Attoparsec.ByteString
 import           Data.Attoparsec.ByteString.Char8 (char, decimal, signed)
 import qualified Data.Attoparsec.ByteString.Lazy as A
-import           Data.Attoparsec.More
 import qualified Data.ByteString as B
 import           Data.ByteString.Builder
 import qualified Data.ByteString.Lazy as L
-import           Data.Monoid
 import           Data.Function
+import           Data.Monoid
 import qualified Data.Map as M
 import           Prelude hiding (take)
 
@@ -120,8 +119,16 @@ surround = (.) (<> char8 'e') . (<>) . char8
 _BValue :: Prism' B.ByteString BValue
 _BValue = prism' (L.toStrict . toLazyByteString . buildBValue) (onlyDo parseBValue)
 
+-- Parse exactly a _ (strict)
+onlyDo :: Parser a -> B.ByteString -> Maybe a
+onlyDo = ((maybeResult . (`feed` B.empty)) .) . parse . (<* endOfInput)
+
 _BValue' :: Prism' L.ByteString BValue
 _BValue' = prism' (toLazyByteString . buildBValue) (onlyDo' parseBValue)
+
+-- Parse exactly a _ (lazy)
+onlyDo' :: Parser a -> L.ByteString -> Maybe a
+onlyDo' = (A.maybeResult .) . A.parse . (<* endOfInput)
 
 ----------------------------------------
 -- CLASSES
