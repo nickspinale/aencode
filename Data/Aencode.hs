@@ -8,7 +8,16 @@ module Data.Aencode
     , _BDict
   --
     , parseBValue
+    , parseBString
+    , parseBInt
+    , parseBList
+    , parseBDict
+  --
     , buildBValue
+    , buildBString
+    , buildBInt
+    , buildBList
+    , buildBDict
   --
     , _BValue
     , _BValue'
@@ -16,6 +25,7 @@ module Data.Aencode
     , ToBencode
     , FromBencode
     , _Translated
+  --
     , ToBencode'
     , FromBencode'
     , _Translated'
