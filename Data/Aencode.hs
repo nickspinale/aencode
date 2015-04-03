@@ -1,4 +1,8 @@
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module Data.Aencode
     ( BDict
@@ -31,6 +35,7 @@ import           Control.Monad
 import           Data.Attoparsec.ByteString
 import           Data.Attoparsec.ByteString.Char8 (char, decimal, signed)
 import qualified Data.Attoparsec.ByteString.Lazy as A
+import           Data.Bits
 import qualified Data.ByteString as B
 import           Data.ByteString.Builder
 import qualified Data.ByteString.Char8 as C
@@ -39,7 +44,6 @@ import qualified Data.ByteString.Lazy.Char8 as LC
 import           Data.Function
 import           Data.Monoid
 import qualified Data.Map.Strict as M
-import           Data.Wordplay
 import           Prelude hiding (take)
 
 type BDict a = M.Map a (BValue a)
@@ -51,17 +55,18 @@ data BValue a = BString a
               | BDict (BDict a)
               deriving Show
 
-instance Functor BValue where
-    fmap f (BString x) = BString $ f x
-    fmap f (BList   x) = BList $ (fmap.fmap) f x
-    fmap f (BDict   x) = BDict . (fmap.fmap) f $ mapKeys f x
-    fmap _ i = i
+-- Not functor because of Ord restraint
+mapStrings :: Ord b => (a -> b) -> BValue a -> BValue b
+mapStrings f (BString x) = BString $ f x
+mapStrings _ (BInt    x) = BInt x
+mapStrings f (BList   x) = BList $ (fmap.mapStrings) f x
+mapStrings f (BDict   x) = BDict . (fmap.mapStrings) f $ M.mapKeys f x
 
 asString :: BValue a -> Maybe a
 asString (BString x) = Just x
 asString _ = Nothing
 
-asInt :: BValue a -> Maybe Int
+asInt :: BValue a -> Maybe Integer
 asInt (BInt x) = Just x
 asInt _ = Nothing
 
@@ -115,7 +120,7 @@ buildBValue (BList   x) = buildBList   x
 buildBValue (BDict   x) = buildBDict   x
 
 buildBString :: Stringable a => a -> Builder
-buildBString x = intDec (lengthify x) <> char8 ':' <> builder a
+buildBString x = intDec (lengthify x) <> char8 ':' <> builder x
 
 buildBInt :: Integer -> Builder
 buildBInt = surround 'i' . integerDec
@@ -124,12 +129,12 @@ buildBList :: Stringable a => [BValue a] -> Builder
 buildBList = surround 'l' . mconcat . map buildBValue
 
 buildBDict :: Stringable a => BDict a -> Builder
-buildBDict x = surround 'd' $ mconcat [ buildBString k <> (foldMap f) v
+buildBDict x = surround 'd' $ mconcat [ buildBString k <> buildBValue v
                                       | (k, v) <- M.toAscList x
                                       ]
 
-surround :: Stringable => Char -> a -> a
-surround = (.) (<> char8' 'e') . mappend . char8'
+surround :: Char -> Builder -> Builder
+surround = (.) (<> char8 'e') . mappend . char8
 
 ----------------------------------------
 -- STRINGABLE
@@ -143,14 +148,15 @@ instance Stringable B.ByteString where
     lengthify = B.length
     builder = byteString
 
+-- Yuck
 instance Stringable L.ByteString where
-    lengthify = L.length
+    lengthify = fromIntegral . L.length
     builder = lazyByteString
 
 type IBuilder = (Sum Int, Builder)
 
-instance Stringable IBuilder where
-    lengthify = fst
+instance Stringable (Sum Int, Builder) where
+    lengthify = getSum . fst
     builder = snd
 
 ----------------------------------------
@@ -160,10 +166,10 @@ instance Stringable IBuilder where
 prefix :: Stringable a => a -> IBuilder
 prefix a = (Sum (lengthify a), builder a)
 
-prefixed :: FiniteBits a -> (a -> Builder) -> IBuilder
-prefixed f a = (finiteByteSize a, f a)
+prefixed :: FiniteBits a => (a -> Builder) -> a -> IBuilder
+prefixed f a = (Sum (finiteByteSize a), f a)
 
-finiteByteSize :: FiniteBits a => a -> Int
+finiteByteSize :: forall a. FiniteBits a => a -> Int
 finiteByteSize _ = case r of 0 -> q
                              _ -> q + 1
   where
