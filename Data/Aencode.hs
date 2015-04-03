@@ -22,18 +22,8 @@ module Data.Aencode
     , buildBDict
   --
     , IBuilder
+    , prefix
     , prefixed
-
-    , _BValue
-    , _BValue'
-  --
-    , ToBencode
-    , FromBencode
-    , _Translated
-  --
-    , ToBencode'
-    , FromBencode'
-    , _Translated'
     ) where
 
 import           Control.Applicative
@@ -115,21 +105,28 @@ parseBDict = char 'd' *> inner <* char 'e'
     sorted _ = True
 
 ----------------------------------------
--- WRITERS
+-- BUILDERS
 ----------------------------------------
 
-class (Monoid a, Lengthable a) => Stringable a where
-    char8' :: Char -> a
-    intDec' :: Int -> a
-    integerDec' :: Integer -> a
+buildBValue :: Stringable a => BValue a -> Builder
+buildBValue (BString x) = buildBString x
+buildBValue (BInt    x) = buildBInt    x
+buildBValue (BList   x) = buildBList   x
+buildBValue (BDict   x) = buildBDict   x
 
-instance Stringable a => Foldable a where
-    foldMap f (BString x) = let y = f x in intDec' (lengthify y) <> char8' ':' <> y
-    foldMap _ (BInt    x) = surround 'i' $ integerDec' x
-    foldMap f (BList   x) = surround 'l' $ mconcat $ map (foldMap f) x
-    foldMap f (BDict   x) = surround 'd' $ mconcat [ (foldMap f) k <> (foldMap f) v
-                                                   | (k, v) <- M.toAscList x
-                                                   ]
+buildBString :: Stringable a => a -> Builder
+buildBString x = intDec (lengthify x) <> char8 ':' <> builder a
+
+buildBInt :: Integer -> Builder
+buildBInt = surround 'i' . integerDec
+
+buildBList :: Stringable a => [BValue a] -> Builder
+buildBList = surround 'l' . mconcat . map buildBValue
+
+buildBDict :: Stringable a => BDict a -> Builder
+buildBDict x = surround 'd' $ mconcat [ buildBString k <> (foldMap f) v
+                                      | (k, v) <- M.toAscList x
+                                      ]
 
 surround :: Stringable => Char -> a -> a
 surround = (.) (<> char8' 'e') . mappend . char8'
@@ -138,81 +135,37 @@ surround = (.) (<> char8' 'e') . mappend . char8'
 -- STRINGABLE
 ----------------------------------------
 
+class Stringable a where
+    lengthify :: a -> Int
+    builder :: a -> Builder
+
 instance Stringable B.ByteString where
-    char8' = C.singleton
-    intDec' = C.pack . show
-    integerDec' = C.pack . show
+    lengthify = B.length
+    builder = byteString
 
 instance Stringable L.ByteString where
-    char8' = C.singleton
-    intDec' = LC.pack . show
-    integerDec' = LC.pack . show
+    lengthify = L.length
+    builder = lazyByteString
 
 type IBuilder = (Sum Int, Builder)
 
 instance Stringable IBuilder where
-    buildBString (Sum i, b) = intDec i <> char8 ':' <> d
+    lengthify = fst
+    builder = snd
 
 ----------------------------------------
--- FOR LENGTHABLES
+-- USEFUL FOR IBUILDERS
 ----------------------------------------
 
-prefixed :: Lengthable a => (a -> Builder) -> a -> IBuilder
-prefixed f a = (Sum (lengthify a), f a)
+prefix :: Stringable a => a -> IBuilder
+prefix a = (Sum (lengthify a), builder a)
 
-instance Lengthabe B.ByteString where
-    lengthify = B.length
+prefixed :: FiniteBits a -> (a -> Builder) -> IBuilder
+prefixed f a = (finiteByteSize a, f a)
 
-instance Lengthabe L.ByteString where
-    lengthify = L.length
+finiteByteSize :: FiniteBits a => a -> Int
+finiteByteSize _ = case r of 0 -> q
+                             _ -> q + 1
+  where
+    (q, r) = finiteBitSize (undefined :: a) `quotRem` 8
 
-----------------------------------------
--- OTHER PARSER STUFF
-----------------------------------------
-
--- Not very efficient because it toStrict's a bytestring
-_BValue :: Prism' B.ByteString BValue
-_BValue = prism' (L.toStrict . toLazyByteString . buildBValue) (onlyDo parseBValue)
-
--- Parse exactly a _ (strict)
-onlyDo :: Parser a -> B.ByteString -> Maybe a
-onlyDo = ((maybeResult . (`feed` B.empty)) .) . parse . (<* endOfInput)
-
-_BValue' :: Prism' L.ByteString BValue
-_BValue' = prism' (toLazyByteString . buildBValue) (onlyDo' parseBValue)
-
--- Parse exactly a _ (lazy)
-onlyDo' :: Parser a -> L.ByteString -> Maybe a
-onlyDo' = (A.maybeResult .) . A.parse . (<* endOfInput)
-
-----------------------------------------
--- CLASSES
-----------------------------------------
-
--- Context-free
-
-class ToBencode a where
-    encode :: a -> BValue
-
-class FromBencode a where
-    decode :: BValue -> Maybe a
-
-_Translated :: (FromBencode a, ToBencode a) => Prism' BValue a
-_Translated = prism' encode decode
-
--- Not context-free
-
-class ToBencode' a where
-    encode' :: c -> a -> BValue
-
-class FromBencode' a where
-    decode' :: c -> BValue -> Maybe a
-
--- _Translated' :: (FromBencode' a, ToBencode' a) => c -> Prism' BValue a
-_Translated' c = prism' (encode' c) (decode' c)
-
-----------------------------------------
--- TEMPLATE HASKELL
-----------------------------------------
-
-makePrisms ''BValue
