@@ -120,7 +120,7 @@ buildBValue (BList   x) = buildBList   x
 buildBValue (BDict   x) = buildBDict   x
 
 buildBString :: Stringable a => a -> Builder
-buildBString x = intDec (lengthify x) <> char8 ':' <> builder x
+buildBString x = integerDec (lengthify x) <> char8 ':' <> builder x
 
 buildBInt :: Integer -> Builder
 buildBInt = surround 'i' . integerDec
@@ -141,21 +141,20 @@ surround = (.) (<> char8 'e') . mappend . char8
 ----------------------------------------
 
 class Stringable a where
-    lengthify :: a -> Int
+    lengthify :: a -> Integer
     builder :: a -> Builder
 
 instance Stringable B.ByteString where
-    lengthify = B.length
+    lengthify = toInteger . B.length
     builder = byteString
 
--- Yuck
 instance Stringable L.ByteString where
-    lengthify = fromIntegral . L.length
+    lengthify = toInteger . L.length
     builder = lazyByteString
 
-type IBuilder = (Sum Int, Builder)
+type IBuilder = (Sum Integer, Builder)
 
-instance Stringable (Sum Int, Builder) where
+instance Stringable (Sum Integer, Builder) where
     lengthify = getSum . fst
     builder = snd
 
@@ -167,7 +166,7 @@ prefix :: Stringable a => a -> IBuilder
 prefix a = (Sum (lengthify a), builder a)
 
 prefixed :: FiniteBits a => (a -> Builder) -> a -> IBuilder
-prefixed f a = (Sum (finiteByteSize a), f a)
+prefixed f a = (Sum (toInteger $ finiteByteSize a), f a)
 
 finiteByteSize :: forall a. FiniteBits a => a -> Int
 finiteByteSize _ = case r of 0 -> q
