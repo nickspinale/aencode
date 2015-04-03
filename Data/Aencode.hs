@@ -1,11 +1,12 @@
 {-# LANGUAGE TemplateHaskell #-}
 
 module Data.Aencode
-    ( BValue(..)
-    , _BString
-    , _BInt
-    , _BList
-    , _BDict
+    ( BDict
+    , BValue(..)
+    , asString
+    , asInt
+    , asList
+    , asDict
   --
     , parseBValue
     , parseBString
@@ -13,12 +14,16 @@ module Data.Aencode
     , parseBList
     , parseBDict
   --
+    , Stringable(..)
     , buildBValue
     , buildBString
     , buildBInt
     , buildBList
     , buildBDict
   --
+    , IBuilder
+    , prefixed
+
     , _BValue
     , _BValue'
   --
@@ -32,32 +37,58 @@ module Data.Aencode
     ) where
 
 import           Control.Applicative
-import           Control.Lens
 import           Control.Monad
 import           Data.Attoparsec.ByteString
 import           Data.Attoparsec.ByteString.Char8 (char, decimal, signed)
 import qualified Data.Attoparsec.ByteString.Lazy as A
 import qualified Data.ByteString as B
 import           Data.ByteString.Builder
+import qualified Data.ByteString.Char8 as C
 import qualified Data.ByteString.Lazy as L
+import qualified Data.ByteString.Lazy.Char8 as LC
 import           Data.Function
 import           Data.Monoid
-import qualified Data.Map as M
+import qualified Data.Map.Strict as M
+import           Data.Wordplay
 import           Prelude hiding (take)
 
+type BDict a = M.Map a (BValue a)
+
 -- A bencoded value.
-data BValue = BString B.ByteString
-            | BInt Integer
-            | BList [BValue]
-            | BDict (M.Map B.ByteString BValue)
-            deriving Show
+data BValue a = BString a
+              | BInt Integer
+              | BList [BValue a]
+              | BDict (BDict a)
+              deriving Show
+
+instance Functor BValue where
+    fmap f (BString x) = BString $ f x
+    fmap f (BList   x) = BList $ (fmap.fmap) f x
+    fmap f (BDict   x) = BDict . (fmap.fmap) f $ mapKeys f x
+    fmap _ i = i
+
+asString :: BValue a -> Maybe a
+asString (BString x) = Just x
+asString _ = Nothing
+
+asInt :: BValue a -> Maybe Int
+asInt (BInt x) = Just x
+asInt _ = Nothing
+
+asList :: BValue a -> Maybe [BValue a]
+asList (BList x) = Just x
+asList _ = Nothing
+
+asDict :: BValue a -> Maybe (BDict a)
+asDict (BDict x) = Just x
+asDict _ = Nothing
 
 ----------------------------------------
 -- PARSERS
 ----------------------------------------
 
 -- Parse a Bencoded value
-parseBValue :: Parser BValue
+parseBValue :: Parser (BValue B.ByteString)
 parseBValue =  BString <$> parseBString
            <|> BInt    <$> parseBInt
            <|> BList   <$> parseBList
@@ -69,10 +100,10 @@ parseBString = decimal <* char ':' >>= take
 parseBInt :: Parser Integer
 parseBInt = char 'i' *> signed decimal <* char 'e'
 
-parseBList :: Parser [BValue]
+parseBList :: Parser [BValue B.ByteString]
 parseBList = char 'l' *> many' parseBValue <* char 'e'
 
-parseBDict :: Parser (M.Map B.ByteString BValue)
+parseBDict :: Parser (BDict B.ByteString)
 parseBDict = char 'd' *> inner <* char 'e'
   where
     inner = do
@@ -87,29 +118,53 @@ parseBDict = char 'd' *> inner <* char 'e'
 -- WRITERS
 ----------------------------------------
 
-buildBValue :: BValue -> Builder
-buildBValue (BString x) = buildBString x
-buildBValue (BInt    x) = buildBInt    x
-buildBValue (BList   x) = buildBList   x
-buildBValue (BDict   x) = buildBDict   x
+class (Monoid a, Lengthable a) => Stringable a where
+    char8' :: Char -> a
+    intDec' :: Int -> a
+    integerDec' :: Integer -> a
 
-buildBString :: B.ByteString -> Builder
-buildBString s = intDec (B.length s) <> char8 ':' <> byteString s
+instance Stringable a => Foldable a where
+    foldMap f (BString x) = let y = f x in intDec' (lengthify y) <> char8' ':' <> y
+    foldMap _ (BInt    x) = surround 'i' $ integerDec' x
+    foldMap f (BList   x) = surround 'l' $ mconcat $ map (foldMap f) x
+    foldMap f (BDict   x) = surround 'd' $ mconcat [ (foldMap f) k <> (foldMap f) v
+                                                   | (k, v) <- M.toAscList x
+                                                   ]
 
-buildBInt :: Integer -> Builder
-buildBInt = surround 'i' . integerDec
+surround :: Stringable => Char -> a -> a
+surround = (.) (<> char8' 'e') . mappend . char8'
 
-buildBList :: [BValue] -> Builder
-buildBList = surround 'l' . mconcat . map buildBValue
+----------------------------------------
+-- STRINGABLE
+----------------------------------------
 
-buildBDict :: M.Map B.ByteString BValue -> Builder
-buildBDict d = surround 'd' $ mconcat
-                   [ buildBString k <> buildBValue v
-                   | (k, v) <-  M.toAscList d
-                   ]
+instance Stringable B.ByteString where
+    char8' = C.singleton
+    intDec' = C.pack . show
+    integerDec' = C.pack . show
 
-surround :: Char -> Builder -> Builder
-surround = (.) (<> char8 'e') . (<>) . char8
+instance Stringable L.ByteString where
+    char8' = C.singleton
+    intDec' = LC.pack . show
+    integerDec' = LC.pack . show
+
+type IBuilder = (Sum Int, Builder)
+
+instance Stringable IBuilder where
+    buildBString (Sum i, b) = intDec i <> char8 ':' <> d
+
+----------------------------------------
+-- FOR LENGTHABLES
+----------------------------------------
+
+prefixed :: Lengthable a => (a -> Builder) -> a -> IBuilder
+prefixed f a = (Sum (lengthify a), f a)
+
+instance Lengthabe B.ByteString where
+    lengthify = B.length
+
+instance Lengthabe L.ByteString where
+    lengthify = L.length
 
 ----------------------------------------
 -- OTHER PARSER STUFF
