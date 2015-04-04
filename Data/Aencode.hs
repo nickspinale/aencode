@@ -11,23 +11,21 @@ module Data.Aencode
     , asInt
     , asList
     , asDict
-  --
+
     , parseBValue
     , parseBString
     , parseBInt
     , parseBList
     , parseBDict
-  --
+
     , Stringable(..)
     , buildBValue
     , buildBString
     , buildBInt
     , buildBList
     , buildBDict
-  --
-    , IBuilder
+
     , prefix
-    , prefixed
     ) where
 
 import           Control.Applicative
@@ -46,34 +44,41 @@ import           Data.Monoid
 import qualified Data.Map.Strict as M
 import           Prelude hiding (take)
 
-type BDict k v = M.Map k (BValue v)
+-- Keys are not generalized because bencoded dictionaries must be ordered
+-- lexographically by key (and things like IBuilders wouldn't work).
+-- I can't think of an instance where efficiency in building keys would
+-- be super important (because they're usually short). If it turns out
+-- I'm wrong, I'll create a superclss of Stringable, and a newtype
+-- (for which the stringable operations would be derives) that
+-- instantiates Ord only for types of this class.
+type BDict a = M.Map B.ByteString (BValue a)
 
 -- A bencoded value.
-data BValue k v = BString v
-                | BInt Integer
-                | BList [BValue v]
-                | BDict (BDict k v)
-                deriving Show
+data BValue a = BString a
+              | BInt Integer
+              | BList [BValue a]
+              | BDict (BDict a)
+              deriving Show
 
-instance Functor (BValue k) where
-    fmap f (BString k) = f v
-    fmap f (BList [b]) = BList $ (fmap.fmap) f b
-    fmap f (BDict m) = BDict $ (fmap.fmap) f b
-    fmap f int = int
+instance Functor BValue where
+    fmap f (BString x) = BString $             f x
+    fmap _ (BInt    x) = BInt    $               x
+    fmap f (BList   x) = BList   $ (fmap.fmap) f x
+    fmap f (BDict   x) = BDict   $ (fmap.fmap) f x
 
-asString :: BValue k v -> Maybe v
+asString :: BValue a -> Maybe a
 asString (BString x) = Just x
 asString _ = Nothing
 
-asInt :: BValue k v -> Maybe Integer
+asInt :: BValue a -> Maybe Integer
 asInt (BInt x) = Just x
 asInt _ = Nothing
 
-asList :: BValue k v -> Maybe [BValue k v]
+asList :: BValue a -> Maybe [BValue a]
 asList (BList x) = Just x
 asList _ = Nothing
 
-asDict :: BValue k v -> Maybe (BDict k v)
+asDict :: BValue a -> Maybe (BDict a)
 asDict (BDict x) = Just x
 asDict _ = Nothing
 
@@ -112,22 +117,22 @@ parseBDict = char 'd' *> inner <* char 'e'
 -- BUILDERS
 ----------------------------------------
 
-buildBValue :: (Ord k, Stringable k, Stringable v) => BValue k v -> Builder
+buildBValue :: Stringable a => BValue a -> Builder
 buildBValue (BString x) = buildBString x
 buildBValue (BInt    x) = buildBInt    x
 buildBValue (BList   x) = buildBList   x
 buildBValue (BDict   x) = buildBDict   x
 
-buildBString :: Stringable v => v -> Builder
+buildBString :: Stringable a => a -> Builder
 buildBString x = integerDec (lengthify x) <> char8 ':' <> builder x
 
 buildBInt :: Integer -> Builder
 buildBInt = surround 'i' . integerDec
 
-buildBList :: (Ord k, Stringable k, Stringable v) => [BValue k v] -> Builder
+buildBList :: Stringable a => [BValue a] -> Builder
 buildBList = surround 'l' . mconcat . map buildBValue
 
-buildBDict :: (Ord k, Stringable k, Stringable v) => BDict k v -> Builder
+buildBDict :: Stringable a => BDict a -> Builder
 buildBDict x = surround 'd' $ mconcat [ buildBString k <> buildBValue v
                                       | (k, v) <- M.toAscList x
                                       ]
@@ -151,30 +156,10 @@ instance Stringable L.ByteString where
     lengthify = toInteger . L.length
     builder = lazyByteString
 
--- This is not a synonym because it SHOULD NOT BE AN INSTANCE OF ORD
-data IBuilder = IBuilder (Sum Integer) Builder
+instance Stringable (Sum Integer, Builder) where
+    lengthify = getSum . fst
+    builder = snd
 
-instance Monoid IBuilder where
-    empty = IBuilder empty empty
-    mappend (IBuilder a b) (IBuilder c d) = IBuilder (a <> b) (c <> d)
-
-instance Stringable IBuilder where
-    lengthify (IBuilder (Sum n) _) = n
-    builder = (IBuilder _ b) = b
-
-----------------------------------------
--- USEFUL FOR IBUILDERS
-----------------------------------------
-
-prefix :: FiniteBits a => (a -> Builder) -> a -> IBuilder
-prefix f a = (Sum (toInteger $ finiteByteSize a), f a)
-
-prefixed :: Stringable a => a -> IBuilder
-prefixed a = (Sum (lengthify a), builder a)
-
-finiteByteSize :: forall a. FiniteBits a => a -> Int
-finiteByteSize _ = case r of 0 -> q
-                             _ -> q + 1
-  where
-    (q, r) = finiteBitSize (undefined :: a) `quotRem` 8
+prefix :: Stringable a => a -> (Sum Integer, Builder)
+prefix a = (Sum (lengthify a), builder a)
 
