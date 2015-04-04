@@ -12,6 +12,8 @@ module Data.Aencode
     , asList
     , asDict
   --
+    , mapStrings
+  -- 
     , parseBValue
     , parseBString
     , parseBInt
@@ -55,13 +57,6 @@ data BValue a = BString a
               | BDict (BDict a)
               deriving Show
 
--- Not functor because of Ord restraint
-mapStrings :: Ord b => (a -> b) -> BValue a -> BValue b
-mapStrings f (BString x) = BString $ f x
-mapStrings _ (BInt    x) = BInt x
-mapStrings f (BList   x) = BList $ (fmap.mapStrings) f x
-mapStrings f (BDict   x) = BDict . (fmap.mapStrings) f $ M.mapKeys f x
-
 asString :: BValue a -> Maybe a
 asString (BString x) = Just x
 asString _ = Nothing
@@ -77,6 +72,17 @@ asList _ = Nothing
 asDict :: BValue a -> Maybe (BDict a)
 asDict (BDict x) = Just x
 asDict _ = Nothing
+
+----------------------------------------
+-- FUNCTOR-LIKE
+----------------------------------------
+
+-- Not functor because of Ord restraint
+mapStrings :: Ord b => (a -> b) -> BValue a -> BValue b
+mapStrings f (BString x) = BString $ f x
+mapStrings _ (BInt    x) = BInt x
+mapStrings f (BList   x) = BList $ (fmap.mapStrings) f x
+mapStrings f (BDict   x) = BDict . (fmap.mapStrings) f $ M.mapKeys f x
 
 ----------------------------------------
 -- PARSERS
