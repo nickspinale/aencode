@@ -7,19 +7,10 @@ module Data.Aencode.Lens
     , _BInt
     , _BList
     , _BDict
-  --
-    , _BValue
-    , _BValue'
     ) where
 
 import           Data.Aencode
-
-import           Data.Attoparsec.ByteString
-import qualified Data.Attoparsec.ByteString.Lazy as A
 import qualified Data.ByteString as B
-import           Data.ByteString.Builder
-import qualified Data.ByteString.Lazy as L
-import qualified Data.Map.Strict as M
 import           Data.Profunctor
 
 ----------------------------------------
@@ -38,40 +29,45 @@ prism' :: (b -> s) -> (s -> Maybe a) -> Prism s s a b
 prism' bs sma = prism bs (\s -> maybe (Left s) Right (sma s))
 
 _BString :: Prism' (BValue a) a
-_BString = prism' BString asString
+_BString = prism' BString getBString
 
 _BInt :: Prism' (BValue a) Integer
-_BInt = prism' BInt asInt
+_BInt = prism' BInt getBInt
 
 _BList :: Prism' (BValue a) [BValue a]
-_BList = prism' BList asList
+_BList = prism' BList getBList
 
 _BDict :: Prism' (BValue a) (BDict a)
-_BDict = prism' BDict asDict
-
-----------------------------------------
--- OTHER PARSER STUFF
-----------------------------------------
-
--- Not very efficient because it toStrict's a bytestring
-_BValue :: Prism' B.ByteString (BValue B.ByteString)
-_BValue = prism' (L.toStrict . toLazyByteString . buildBValue) (onlyDo parseBValue)
-
--- Parse exactly a _ (strict)
-onlyDo :: Parser a -> B.ByteString -> Maybe a
-onlyDo = ((maybeResult . (`feed` B.empty)) .) . parse . (<* endOfInput)
-
-_BValue' :: Prism' L.ByteString (BValue B.ByteString)
-_BValue' = prism' (toLazyByteString . buildBValue) (onlyDo' parseBValue)
-
--- Parse exactly a _ (lazy)
-onlyDo' :: Parser a -> L.ByteString -> Maybe a
-onlyDo' = (A.maybeResult .) . A.parse . (<* endOfInput)
-
+_BDict = prism' BDict getBDict
 
 -- =========================================================
 -- Tabled for now:
 -- =========================================================
+
+-- import           Data.Attoparsec.ByteString
+-- import qualified Data.Attoparsec.ByteString.Lazy as A
+-- import           Data.ByteString.Builder
+-- import qualified Data.ByteString.Lazy as L
+-- import qualified Data.Map.Strict as M
+
+-- ----------------------------------------
+-- -- OTHER PARSER STUFF
+-- ----------------------------------------
+
+-- -- Not very efficient because it toStrict's a bytestring
+-- _BValue :: Prism' B.ByteString (BValue B.ByteString)
+-- _BValue = prism' (L.toStrict . toLazyByteString . buildBValue) (onlyDo parseBValue)
+
+-- -- Parse exactly a _ (strict)
+-- onlyDo :: Parser a -> B.ByteString -> Maybe a
+-- onlyDo = ((maybeResult . (`feed` B.empty)) .) . parse . (<* endOfInput)
+
+-- _BValue' :: Prism' L.ByteString (BValue B.ByteString)
+-- _BValue' = prism' (toLazyByteString . buildBValue) (onlyDo' parseBValue)
+
+-- -- Parse exactly a _ (lazy)
+-- onlyDo' :: Parser a -> L.ByteString -> Maybe a
+-- onlyDo' = (A.maybeResult .) . A.parse . (<* endOfInput)
 
 -- ----------------------------------------
 -- -- CLASSES

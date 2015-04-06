@@ -1,6 +1,5 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE InstanceSigs #-}
-{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
@@ -8,10 +7,10 @@ module Data.Aencode
     ( BDict
 
     , BValue(..)
-    , asString
-    , asInt
-    , asList
-    , asDict
+    , getBString
+    , getBInt
+    , getBList
+    , getBDict
 
     , parseBValue
     , parseBString
@@ -26,6 +25,7 @@ module Data.Aencode
     , buildBList
     , buildBDict
 
+    , IBuilder
     , prefix
     ) where
 
@@ -67,21 +67,21 @@ instance Functor BValue where
     fmap f (BList   x) = BList   $ (fmap.fmap) f x
     fmap f (BDict   x) = BDict   $ (fmap.fmap) f x
 
-asString :: BValue a -> Maybe a
-asString (BString x) = Just x
-asString _ = Nothing
+getBString :: BValue a -> Maybe a
+getBString (BString x) = Just x
+getBString _ = Nothing
 
-asInt :: BValue a -> Maybe Integer
-asInt (BInt x) = Just x
-asInt _ = Nothing
+getBInt :: BValue a -> Maybe Integer
+getBInt (BInt x) = Just x
+getBInt _ = Nothing
 
-asList :: BValue a -> Maybe [BValue a]
-asList (BList x) = Just x
-asList _ = Nothing
+getBList :: BValue a -> Maybe [BValue a]
+getBList (BList x) = Just x
+getBList _ = Nothing
 
-asDict :: BValue a -> Maybe (BDict a)
-asDict (BDict x) = Just x
-asDict _ = Nothing
+getBDict :: BValue a -> Maybe (BDict a)
+getBDict (BDict x) = Just x
+getBDict _ = Nothing
 
 ----------------------------------------
 -- PARSERS
@@ -157,10 +157,12 @@ instance Stringable L.ByteString where
     lengthify = toInteger . L.length
     builder = lazyByteString
 
+type IBuilder = (Sum Integer, Builder)
+
 instance Stringable (Sum Integer, Builder) where
     lengthify = getSum . fst
     builder = snd
 
-prefix :: Stringable a => a -> (Sum Integer, Builder)
+prefix :: Stringable a => a -> IBuilder
 prefix a = (Sum (lengthify a), builder a)
 
