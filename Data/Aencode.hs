@@ -151,11 +151,16 @@ instance Stringable L.ByteString where
     lengthify = toInteger . L.length
     builder = lazyByteString
 
-type IBuilder = (Sum Integer, Builder)
+-- This is not a synonym because it SHOULD NOT BE AN INSTANCE OF ORD
+data IBuilder = IBuilder (Sum Integer) Builder
 
-instance Stringable (Sum Integer, Builder) where
-    lengthify = getSum . fst
-    builder = snd
+instance Monoid IBuilder where
+    empty = IBuilder empty empty
+    mappend (IBuilder a b) (IBuilder c d) = IBuilder (a <> b) (c <> d)
+
+instance Stringable IBuilder where
+    lengthify (IBuilder (Sum n) _) = n
+    builder = (IBuilder _ b) = b
 
 ----------------------------------------
 -- USEFUL FOR IBUILDERS
