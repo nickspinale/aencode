@@ -12,8 +12,6 @@ module Data.Aencode
     , asList
     , asDict
   --
-    , mapStrings
-  -- 
     , parseBValue
     , parseBString
     , parseBInt
@@ -48,41 +46,36 @@ import           Data.Monoid
 import qualified Data.Map.Strict as M
 import           Prelude hiding (take)
 
-type BDict a = M.Map a (BValue a)
+type BDict k v = M.Map k (BValue v)
 
 -- A bencoded value.
-data BValue a = BString a
-              | BInt Integer
-              | BList [BValue a]
-              | BDict (BDict a)
-              deriving Show
+data BValue k v = BString v
+                | BInt Integer
+                | BList [BValue v]
+                | BDict (BDict k v)
+                deriving Show
 
-asString :: BValue a -> Maybe a
+instance Functor (BValue k) where
+    fmap f (BString k) = f v
+    fmap f (BList [b]) = BList $ (fmap.fmap) f b
+    fmap f (BDict m) = BDict $ (fmap.fmap) f b
+    fmap f int = int
+
+asString :: BValue k v -> Maybe v
 asString (BString x) = Just x
 asString _ = Nothing
 
-asInt :: BValue a -> Maybe Integer
+asInt :: BValue k v -> Maybe Integer
 asInt (BInt x) = Just x
 asInt _ = Nothing
 
-asList :: BValue a -> Maybe [BValue a]
+asList :: BValue k v -> Maybe [BValue k v]
 asList (BList x) = Just x
 asList _ = Nothing
 
-asDict :: BValue a -> Maybe (BDict a)
+asDict :: BValue k v -> Maybe (BDict k v)
 asDict (BDict x) = Just x
 asDict _ = Nothing
-
-----------------------------------------
--- FUNCTOR-LIKE
-----------------------------------------
-
--- Not functor because of Ord restraint
-mapStrings :: Ord b => (a -> b) -> BValue a -> BValue b
-mapStrings f (BString x) = BString $ f x
-mapStrings _ (BInt    x) = BInt x
-mapStrings f (BList   x) = BList $ (fmap.mapStrings) f x
-mapStrings f (BDict   x) = BDict . (fmap.mapStrings) f $ M.mapKeys f x
 
 ----------------------------------------
 -- PARSERS
@@ -119,22 +112,22 @@ parseBDict = char 'd' *> inner <* char 'e'
 -- BUILDERS
 ----------------------------------------
 
-buildBValue :: Stringable a => BValue a -> Builder
+buildBValue :: (Ord k, Stringable k, Stringable v) => BValue k v -> Builder
 buildBValue (BString x) = buildBString x
 buildBValue (BInt    x) = buildBInt    x
 buildBValue (BList   x) = buildBList   x
 buildBValue (BDict   x) = buildBDict   x
 
-buildBString :: Stringable a => a -> Builder
+buildBString :: Stringable v => v -> Builder
 buildBString x = integerDec (lengthify x) <> char8 ':' <> builder x
 
 buildBInt :: Integer -> Builder
 buildBInt = surround 'i' . integerDec
 
-buildBList :: Stringable a => [BValue a] -> Builder
+buildBList :: (Ord k, Stringable k, Stringable v) => [BValue k v] -> Builder
 buildBList = surround 'l' . mconcat . map buildBValue
 
-buildBDict :: Stringable a => BDict a -> Builder
+buildBDict :: (Ord k, Stringable k, Stringable v) => BDict k v -> Builder
 buildBDict x = surround 'd' $ mconcat [ buildBString k <> buildBValue v
                                       | (k, v) <- M.toAscList x
                                       ]
@@ -168,11 +161,11 @@ instance Stringable (Sum Integer, Builder) where
 -- USEFUL FOR IBUILDERS
 ----------------------------------------
 
-prefix :: Stringable a => a -> IBuilder
-prefix a = (Sum (lengthify a), builder a)
+prefix :: FiniteBits a => (a -> Builder) -> a -> IBuilder
+prefix f a = (Sum (toInteger $ finiteByteSize a), f a)
 
-prefixed :: FiniteBits a => (a -> Builder) -> a -> IBuilder
-prefixed f a = (Sum (toInteger $ finiteByteSize a), f a)
+prefixed :: Stringable a => a -> IBuilder
+prefixed a = (Sum (lengthify a), builder a)
 
 finiteByteSize :: forall a. FiniteBits a => a -> Int
 finiteByteSize _ = case r of 0 -> q
