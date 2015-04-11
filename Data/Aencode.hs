@@ -6,6 +6,7 @@
 
 module Data.Aencode
     ( BDict
+
     , BValue(..)
     , asString
     , asInt
