@@ -18,7 +18,7 @@ module Data.Aencode
     , parseBList
     , parseBDict
 
-    , Stringable(..)
+    , BEString(..)
     , buildBValue
     , buildBString
     , buildBInt
@@ -49,16 +49,16 @@ import           Prelude hiding (take)
 -- lexographically by key (and things like IBuilders wouldn't work).
 -- I can't think of an instance where efficiency in building keys would
 -- be super important (because they're usually short). If it turns out
--- I'm wrong, I'll create a superclss of Stringable, and a newtype
+-- I'm wrong, I'll create a superclss of BEString, and a newtype
 -- (for which the stringable operations would be derives) that
 -- instantiates Ord only for types of this class.
-type BDict a = M.Map B.ByteString (BValue a)
+type BDict s = M.Map B.ByteString (BValue s)
 
 -- A bencoded value.
-data BValue a = BString a
+data BValue s = BString s
               | BInt Integer
-              | BList [BValue a]
-              | BDict (BDict a)
+              | BList [BValue s]
+              | BDict (BDict s)
               deriving Show
 
 instance Functor BValue where
@@ -67,19 +67,19 @@ instance Functor BValue where
     fmap f (BList   x) = BList   $ (fmap.fmap) f x
     fmap f (BDict   x) = BDict   $ (fmap.fmap) f x
 
-getBString :: BValue a -> Maybe a
+getBString :: BValue s -> Maybe s
 getBString (BString x) = Just x
 getBString _ = Nothing
 
-getBInt :: BValue a -> Maybe Integer
+getBInt :: BValue s -> Maybe Integer
 getBInt (BInt x) = Just x
 getBInt _ = Nothing
 
-getBList :: BValue a -> Maybe [BValue a]
+getBList :: BValue s -> Maybe [BValue s]
 getBList (BList x) = Just x
 getBList _ = Nothing
 
-getBDict :: BValue a -> Maybe (BDict a)
+getBDict :: BValue s -> Maybe (BDict s)
 getBDict (BDict x) = Just x
 getBDict _ = Nothing
 
@@ -118,22 +118,22 @@ parseBDict = char 'd' *> inner <* char 'e'
 -- BUILDERS
 ----------------------------------------
 
-buildBValue :: Stringable a => BValue a -> Builder
+buildBValue :: BEString s => BValue s -> Builder
 buildBValue (BString x) = buildBString x
 buildBValue (BInt    x) = buildBInt    x
 buildBValue (BList   x) = buildBList   x
 buildBValue (BDict   x) = buildBDict   x
 
-buildBString :: Stringable a => a -> Builder
-buildBString x = integerDec (lengthify x) <> char8 ':' <> builder x
+buildBString :: BEString s => s -> Builder
+buildBString x = integerDec (lengthOf x) <> char8 ':' <> builder x
 
 buildBInt :: Integer -> Builder
 buildBInt = surround 'i' . integerDec
 
-buildBList :: Stringable a => [BValue a] -> Builder
+buildBList :: BEString s => [BValue s] -> Builder
 buildBList = surround 'l' . mconcat . map buildBValue
 
-buildBDict :: Stringable a => BDict a -> Builder
+buildBDict :: BEString s => BDict s -> Builder
 buildBDict x = surround 'd' $ mconcat [ buildBString k <> buildBValue v
                                       | (k, v) <- M.toAscList x
                                       ]
@@ -145,24 +145,24 @@ surround = (.) (<> char8 'e') . mappend . char8
 -- STRINGABLE
 ----------------------------------------
 
-class Stringable a where
-    lengthify :: a -> Integer
-    builder :: a -> Builder
+class BEString s where
+    lengthOf :: s -> Integer
+    builder :: s -> Builder
 
-instance Stringable B.ByteString where
-    lengthify = toInteger . B.length
+instance BEString B.ByteString where
+    lengthOf = toInteger . B.length
     builder = byteString
 
-instance Stringable L.ByteString where
-    lengthify = toInteger . L.length
+instance BEString L.ByteString where
+    lengthOf = toInteger . L.length
     builder = lazyByteString
 
 type IBuilder = (Sum Integer, Builder)
 
-instance Stringable (Sum Integer, Builder) where
-    lengthify = getSum . fst
+instance BEString (Sum Integer, Builder) where
+    lengthOf = getSum . fst
     builder = snd
 
-prefix :: Stringable a => a -> IBuilder
-prefix a = (Sum (lengthify a), builder a)
+prefix :: BEString s => s -> IBuilder
+prefix a = (Sum (lengthOf a), builder a)
 
