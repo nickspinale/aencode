@@ -2,14 +2,14 @@
 {-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE RankNTypes #-}
 
-module Data.Aencode.Lens
+module Data.Bencode.Lens
     ( _BString
     , _BInt
     , _BList
     , _BDict
     ) where
 
-import           Data.Aencode
+import           Data.Bencode
 import qualified Data.ByteString as B
 import           Data.Profunctor
 

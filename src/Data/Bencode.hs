@@ -3,7 +3,7 @@
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
-module Data.Aencode
+module Data.Bencode
     ( BDict
 
     , BValue(..)

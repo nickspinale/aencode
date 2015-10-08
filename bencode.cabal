@@ -1,8 +1,8 @@
-name:                aencode
+name:                bencode
 version:             0.1.0.0
 synopsis:            Efficient bencode parsers and serialization
 -- description:         
-homepage:            https://github.com/nickspinale/aencode.git
+homepage:            https://github.com/nickspinale/bencode.git
 license:             MIT
 license-file:        LICENSE
 author:              Nick Spinale
@@ -14,8 +14,8 @@ extra-source-files:  README.md
 cabal-version:       >=1.10
 
 library
-  exposed-modules:     Data.Aencode
-                       Data.Aencode.Lens
+  exposed-modules:     Data.Bencode
+                       Data.Bencode.Lens
   -- other-modules:       
   -- other-extensions:
   build-depends:       attoparsec >= 0.10,
