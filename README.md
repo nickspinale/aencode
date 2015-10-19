@@ -1,7 +1,7 @@
 # bencode
-Efficient bencode parsers and serialization
+Efficient bencode parsing and serialization
 
 **Features**  
-*   fast: built on [attoparsec](https://github.com/bos/attoparsec), and uses bytestring builders
-*   flexible approach to serialization (the bencode type is polymorphic)
-*   includes [lenses](https://github.com/ekmett/lens) without incurring any dependencies
+*   Fast: built on [attoparsec](https://github.com/bos/attoparsec), and uses bytestring builders
+*   Flexible approach to serialization (the `Bencode` type is polymorphic over intermediate builder method)
+*   Includes [lenses](https://github.com/ekmett/lens) without incurring any dependencies
